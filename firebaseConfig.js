@@ -20,3 +20,4 @@ const auth = getAuth(app); // Inicializa la autenticación
 
 // Export the initialized modules
 export { app, db, auth };
+

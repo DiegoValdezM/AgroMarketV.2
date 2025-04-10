@@ -8,11 +8,11 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 // Importamos las pantallas (componentes) que vamos a usar en el stack de navegación.
-import HomeScreen from './src/views/publics/inicioView';
-import LoginScreen from './src/views/publics/loginView';
-import Home2Screen from './src/pages/Home';
-import FormScreen from './src/pages/Form';
-import FormSingin from './src/pages/SingIn';
+import HomeScreen from './src/views/publics/InicioView';
+import LoginScreen from './src/views/publics/LoginView';
+import Home2Screen from './src/views/publics/HomeView';
+import FormScreen from './src/views/publics/AddPostForm';
+import FormSignIn from './src/views/publics/SignInView';
 
 // Creamos el stack de navegación.
 const Stack = createNativeStackNavigator();
@@ -34,7 +34,7 @@ export default function App() {
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Home" component={Home2Screen} />
         <Stack.Screen name="Form" component={FormScreen} />
-        <Stack.Screen name="SingIn" component={FormSingin} />
+        <Stack.Screen name="SignIn" component={FormSignIn} />
       </Stack.Navigator>
 
     </NavigationContainer>

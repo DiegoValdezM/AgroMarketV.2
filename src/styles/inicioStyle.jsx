@@ -2,7 +2,7 @@ import { StyleSheet, Dimensions } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
-const styles = StyleSheet.create({
+const inicioStyle = StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -64,4 +64,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default styles;
+export default inicioStyle;
