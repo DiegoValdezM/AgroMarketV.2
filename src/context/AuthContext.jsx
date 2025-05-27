@@ -1,48 +1,54 @@
 // src/context/AuthContext.js
-import React, { createContext, useState, useEffect, useContext, useRef } from 'react'; // Añadido useRef
-import { AppState } from 'react-native'; // Añadido AppState
+import React, { createContext, useState, useEffect, useContext } from 'react';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'; // Añadido updateDoc, serverTimestamp
-import { app } from '../../firebaseConfig';
+// Añade query, where, getDocs, setDoc, serverTimestamp
+import { getFirestore, collection, query, where, getDocs, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { app } from '../../firebaseConfig'; // Ajusta la ruta
 
-// 1. Crear el Contexto
 const AuthContext = createContext();
 
-// 2. Hook personalizado para usar el Contexto más fácilmente
 export const useAuth = () => {
   return useContext(AuthContext);
 };
 
-// 3. Crear el Proveedor del Contexto (AuthProvider)
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
-  const [userData, setUserData] = useState(null); // Estado para guardar datos del perfil de Firestore
+  const [userData, setUserData] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(true);
 
-  const auth = getAuth(app);
-  const db = getFirestore(app);
+  // IMPORTANTE: Obtén auth y db desde la app DE UNA SOLA VEZ, no desde firebaseConfig directamente si ya están inicializados allí
+  // O, si firebaseConfig.js ya exporta 'auth' y 'db' inicializados (como lo hace tu archivo), úsalos directamente.
+  // La forma en que lo tienes (getAuth(app), getFirestore(app)) aquí es redundante si firebaseConfig.js ya lo hace y exporta.
+  // Para mantenerlo simple y alineado con tu firebaseConfig.js que exporta 'auth' y 'db':
+  // import { auth as firebaseAuth, db as firebaseDb } from '../../firebaseConfig';
+  // const auth = firebaseAuth;
+  // const db = firebaseDb;
+  // Pero ya que app se exporta, podemos seguir así:
+  const authInstance = getAuth(app); // Usar una variable diferente para no sombrear la importada si la hubiera
+  const dbInstance = getFirestore(app);
 
-  // Ref para el estado actual de la aplicación (foreground/background)
-  const appStateRef = useRef(AppState.currentState);
-
-  // Efecto para el listener de autenticación y obtener datos del usuario
   useEffect(() => {
     console.log('[AuthContext] Montando listener de onAuthStateChanged.');
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+    const unsubscribeAuth = onAuthStateChanged(authInstance, async (user) => { // Usa authInstance
       setCurrentUser(user);
-      setIsAdmin(false); // Resetear el estado de admin
-      setUserData(null); // Resetear datos del usuario
+      setIsAdmin(false);
+      setUserData(null);
 
       if (user) {
-        console.log('[AuthContext] Usuario autenticado:', user.uid);
-        const userDocRef = doc(db, 'usuarios', user.uid);
+        console.log('[AuthContext] Usuario autenticado con Firebase Auth UID:', user.uid);
+        const usersCollectionRef = collection(dbInstance, 'usuarios'); // Usa dbInstance
+        // Busca el documento del usuario en Firestore donde el campo 'authUid' coincida con user.uid
+        const q = query(usersCollectionRef, where("authUid", "==", user.uid));
+
         try {
-          const userDocSnap = await getDoc(userDocRef);
-          if (userDocSnap.exists()) {
+          const querySnapshot = await getDocs(q);
+          if (!querySnapshot.empty) {
+            const userDocSnap = querySnapshot.docs[0]; // Debería haber solo uno
             const firestoreUserData = userDocSnap.data();
-            setUserData(firestoreUserData); // Guardar datos del perfil de Firestore
-            console.log('[AuthContext] Datos del usuario en Firestore:', firestoreUserData);
+            // Guarda también el ID del documento de Firestore, podría ser útil
+            setUserData({ firestoreDocId: userDocSnap.id, ...firestoreUserData });
+            console.log('[AuthContext] Datos del usuario encontrados en Firestore (doc ID ' + userDocSnap.id + '):', firestoreUserData);
             if (firestoreUserData.role === 'admin') {
               setIsAdmin(true);
               console.log('[AuthContext] Acceso como Administrador concedido.');
@@ -50,11 +56,36 @@ export const AuthProvider = ({ children }) => {
               console.log('[AuthContext] Acceso como Usuario Regular.');
             }
           } else {
-            console.warn('[AuthContext] ¡Advertencia! Documento de usuario no encontrado en Firestore para UID:', user.uid);
-            // Considera crear un perfil básico aquí si es necesario para tu app
+            console.warn('[AuthContext] ¡Advertencia! Documento de usuario NO encontrado en Firestore para authUid:', user.uid);
+            // --- INICIO: Lógica para crear perfil si no existe ---
+            // Esta es una forma de asegurar que cada usuario de Auth tenga un perfil.
+            // El ID del documento aquí será un ID automático de Firestore.
+            console.log(`[AuthContext] Intentando crear perfil para usuario con authUid: ${user.uid}`);
+            try {
+              const newUserDocRef = doc(collection(dbInstance, "usuarios")); // Crea un ID automático
+              await setDoc(newUserDocRef, {
+                authUid: user.uid, // MUY IMPORTANTE: Guarda el UID de Firebase Auth
+                email: user.email,
+                nombre: user.displayName || user.email.split('@')[0] || "Usuario Nuevo",
+                role: "user", // Rol por defecto
+                createdAt: serverTimestamp(), // Fecha de creación
+                // ... otros campos iniciales que desees ...
+              });
+              const newProfileData = { 
+                authUid: user.uid, 
+                email: user.email, 
+                nombre: user.displayName || user.email.split('@')[0] || "Usuario Nuevo", 
+                role: "user" 
+              };
+              setUserData({ firestoreDocId: newUserDocRef.id, ...newProfileData });
+              console.log('[AuthContext] Perfil básico creado en Firestore con ID de documento:', newUserDocRef.id, 'y authUid:', user.uid);
+            } catch (creationError) {
+              console.error('[AuthContext] Error creando perfil básico en Firestore:', creationError);
+            }
+            // --- FIN: Lógica para crear perfil si no existe ---
           }
         } catch (error) {
-          console.error("[AuthContext] Error al obtener datos del usuario desde Firestore:", error);
+          console.error("[AuthContext] Error al obtener/crear datos del usuario desde Firestore:", error);
         }
       } else {
         console.log('[AuthContext] No hay usuario autenticado.');
@@ -66,87 +97,11 @@ export const AuthProvider = ({ children }) => {
       console.log('[AuthContext] Desmontando listener de onAuthStateChanged.');
       unsubscribeAuth();
     };
-  }, [auth, db]);
-
-
-  // Efecto para manejar el sistema de presencia (isOnline, lastSeen)
-  useEffect(() => {
-    if (!currentUser) { // Solo actuar si hay un usuario logueado
-      return;
-    }
-
-    console.log(`[AuthContext] Montando listener de AppState para usuario: ${currentUser.uid}. Estado actual: ${appStateRef.current}`);
-    const userStatusRef = doc(db, 'usuarios', currentUser.uid);
-
-    // Función para manejar cambios de estado de la app
-    const handleAppStateChange = async (nextAppState) => {
-      const currentStatus = appStateRef.current;
-      console.log(`[AuthContext] AppState cambió de ${currentStatus} a ${nextAppState} para usuario ${currentUser.uid}`);
-
-      if (currentStatus.match(/inactive|background/) && nextAppState === 'active') {
-        // App vuelve a primer plano
-        console.log('[AuthContext] AppState: Foreground. Marcando usuario como Online.');
-        try {
-          await updateDoc(userStatusRef, {
-            isOnline: true,
-            lastSeen: serverTimestamp()
-          });
-        } catch (e) {
-          console.error("[AuthContext] Error actualizando estado a online:", e);
-        }
-      } else if (currentStatus === 'active' && nextAppState.match(/inactive|background/)) {
-        // App va a segundo plano o se vuelve inactiva
-        console.log('[AuthContext] AppState: Background/Inactive. Marcando usuario como Offline.');
-        try {
-          await updateDoc(userStatusRef, {
-            isOnline: false,
-            lastSeen: serverTimestamp()
-          });
-        } catch (error) {
-          console.error('[AuthContext] Error actualizando estado a offline:', error);
-        }
-      }
-      appStateRef.current = nextAppState; // Actualizar el estado de referencia
-    };
-
-    // Establecer estado inicial al montar el listener si la app ya está activa
-    if (AppState.currentState === 'active') {
-      console.log('[AuthContext] App ya está activa al montar listener. Marcando como Online.');
-      updateDoc(userStatusRef, {
-        isOnline: true,
-        lastSeen: serverTimestamp()
-      }).catch(e => console.error("[AuthContext] Error actualizando estado a online (estado inicial):", e));
-    } else {
-      // Si la app se carga pero no está activa, asegurar que esté offline
-      console.log('[AuthContext] App no está activa al montar listener. Marcando como Offline.');
-       updateDoc(userStatusRef, {
-        isOnline: false,
-        lastSeen: serverTimestamp()
-      }).catch(e => console.error("[AuthContext] Error actualizando estado a offline (estado inicial):", e));
-    }
-
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-
-    // Limpieza al desmontar o cuando currentUser cambia
-    return () => {
-      console.log(`[AuthContext] Desmontando listener de AppState para usuario: ${currentUser?.uid}.`);
-      subscription.remove();
-      // Cuando el listener se quita (ej. cierre de sesión), marcar como offline
-      // Es importante verificar currentUser de nuevo porque podría ser null si el usuario cerró sesión
-      if (auth.currentUser) { // Usar auth.currentUser para la referencia más actualizada
-        const finalUserStatusRef = doc(db, 'usuarios', auth.currentUser.uid);
-        console.log(`[AuthContext] Limpieza: Marcando usuario ${auth.currentUser.uid} como offline.`);
-        updateDoc(finalUserStatusRef, {
-          isOnline: false,
-          lastSeen: serverTimestamp()
-        }).catch(e => console.error("[AuthContext] Error actualizando a offline en limpieza de AppState:", e));
-      }
-    };
-  }, [currentUser, db, auth]); // 'auth' añadido a dependencias por si se usa en la limpieza
+  }, [authInstance, dbInstance]);
 
   const value = {
     currentUser,
-    userData, // Exponer userData para que otros componentes puedan usar el perfil
+    userData,
     isAdmin,
     loadingAuth,
   };
