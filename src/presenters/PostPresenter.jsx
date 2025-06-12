@@ -1,18 +1,19 @@
-// PostPresenter.jsx
+// PostPresenter.jsx (Modificado)
 import PostModel from '../models/PostModel';
-import { Alert } from 'react-native'; // Asumo que usas Alert en la vista, pero el presenter podría usarlo para debug
+import { db } from '../../firebaseConfig'; // Importa la instancia de db de Firestore
+import { doc, getDoc } from 'firebase/firestore'; // Importa las funciones necesarias de Firestore
 
 export default class PostPresenter {
   constructor(view) {
-    this.view = view; // 'view' debe tener los métodos showError y onSuccess
+    this.view = view; // La vista debe implementar showError(message) y onSuccess(message)
   }
 
   async submitPost(formData) {
-    // --- CONSOLE.LOG: DATOS RECIBIDOS DEL FORMULARIO ---
-    console.log("[PostPresenter] submitPost llamado. formData recibida:", JSON.stringify(formData, null, 2));
+    console.log("[PostPresenter] submitPost llamado. FormData:", JSON.stringify(formData, null, 2));
+
     const { title, price, location, description, contacto, imageUri } = formData;
 
-    // Validaciones mejoradas
+    // Validaciones
     if (!title || !location || !description) {
       this.view.showError('Título, ubicación y descripción son obligatorios');
       return;
@@ -25,94 +26,83 @@ export default class PostPresenter {
     }
 
     try {
-      // this.view.showLoading(); // Si tienes un indicador de carga en la vista
-
       const user = PostModel.getCurrentUser();
       if (!user) {
-        console.error("[PostPresenter] Error: Usuario no autenticado al intentar publicar.");
         this.view.showError('Debes iniciar sesión para publicar');
         return;
       }
-      // --- CONSOLE.LOG: DATOS DEL USUARIO AUTENTICADO ---
       console.log("[PostPresenter] Usuario autenticado:", user.uid);
-      console.log("[PostPresenter] user.displayName:", user.displayName); // <--- LOG IMPORTANTE
-      console.log("[PostPresenter] user.photoURL:", user.photoURL);     // <--- LOG IMPORTANTE
 
-      let finalImageUrl = null; // Inicializar como null
+      let imageUrl = null;
+
       if (imageUri) {
-        // --- CONSOLE.LOG: INTENTANDO SUBIR IMAGEN ---
-        console.log("[PostPresenter] Hay imageUri, intentando subir imagen:", imageUri);
-        try {
-          finalImageUrl = await PostModel.uploadImage(imageUri);
-          // --- CONSOLE.LOG: IMAGEN SUBIDA EXITOSAMENTE ---
-          console.log("[PostPresenter] Imagen subida. URL obtenida:", finalImageUrl);
-        } catch (uploadError) {
-          console.error('[PostPresenter] Falló la llamada a PostModel.uploadImage. Error:', uploadError);
-          // Propagar el error para que lo maneje el catch principal y luego handleError
-          throw uploadError; 
-        }
+        console.log("[PostPresenter] Subiendo imagen...");
+        imageUrl = await PostModel.uploadImage(imageUri);
+        console.log("[PostPresenter] Imagen subida con éxito. URL:", imageUrl);
       } else {
-        // --- CONSOLE.LOG: NO HAY IMAGEN URI ---
-        console.log("[PostPresenter] No se proporcionó imageUri. Se creará el post sin imagen.");
+        console.log("[PostPresenter] No se proporcionó una imagen.");
       }
 
-      // --- Preparamos los datos para guardar, incluyendo la información del autor ---
-      const postDataToSave = {
+      // --- CAMBIO CLAVE AQUÍ ---
+      // 1. Obtener la información del perfil del usuario desde Firestore
+      let userProfileName = `Usuario ${user.uid.substring(0, 6)}`; // Fallback por defecto
+      let userProfilePhoto = null; // Fallback por defecto
+
+      const userDocRef = doc(db, 'users', user.uid); // Asume que tu colección de usuarios es 'users' y el ID del documento es el UID
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (userDocSnap.exists()) {
+        const userData = userDocSnap.data();
+        // Asegúrate de que 'usuario' sea el campo donde guardas el nombre en Firestore
+        userProfileName = userData.usuario || userProfileName; 
+        // Si también guardas la foto de perfil en Firestore, úsala
+        userProfilePhoto = userData.photoURL || userProfilePhoto; 
+      } else {
+        console.warn(`[PostPresenter] Documento de usuario no encontrado para UID: ${user.uid}`);
+      }
+      // --- FIN CAMBIO CLAVE ---
+
+
+      const postData = {
         title,
-        price: numericPrice, // Usamos el precio convertido
+        price: numericPrice,
         location,
         description,
-        userId: user.uid,    // ID del usuario que crea el post
-        imageUrl: finalImageUrl, // URL de la imagen subida (o null si no hay)
         contacto,
-        // Datos del autor para mostrar en la publicación:
-        userName: user.displayName || `Usuario ${user.uid.substring(0, 6)}`, // Nombre para mostrar del usuario
-                                                                            // Usa el displayName de Firebase Auth, o un fallback.
-        userPhoto: user.photoURL || null,  // URL de la foto de perfil del usuario (de Firebase Auth)
+        imageUrl,
+        userId: user.uid,
+        userName: userProfileName, // Usamos el nombre obtenido de Firestore
+        userPhoto: userProfilePhoto, // Usamos la foto obtenida de Firestore
       };
-      // --- CONSOLE.LOG: DATOS FINALES PARA CREAR POST ---
-      // ESTE LOG ES CLAVE PARA VER QUÉ SE VA A GUARDAR
-      console.log("[PostPresenter] Intentando crear post en Firestore con datos:", JSON.stringify(postDataToSave, null, 2)); 
 
-      const postId = await PostModel.createPost(postDataToSave);
+      console.log("[PostPresenter] Guardando post en Firestore:", JSON.stringify(postData, null, 2));
 
-      // --- CONSOLE.LOG: POST CREADO ---
-      console.log("[PostPresenter] Post creado exitosamente en Firestore. ID del Post:", postId);
+      const postId = await PostModel.createPost(postData);
 
-      this.view.onSuccess('¡Publicación creada exitosamente!'); // Llama al callback onSuccess de la vista
+      console.log("[PostPresenter] Post creado. ID:", postId);
+      this.view.onSuccess('¡Publicación creada exitosamente!');
     } catch (error) {
-      // --- CONSOLE.LOG: ERROR GENERAL EN submitPost ---
-      console.error("[PostPresenter] Error en el bloque try/catch principal de submitPost:", error.message);
       this.handleError(error);
-    } finally {
-      // this.view.hideLoading(); // Si tienes un indicador de carga
     }
   }
 
   handleError(error) {
     const errorMap = {
-      // Firebase Errors
       'auth/network-request-failed': 'Error de conexión',
       'storage/object-not-found': 'Imagen no encontrada',
-      
-      // Custom Errors (de PostModel o de este Presenter)
-      'image-upload-failed': 'Error al subir la imagen. Intenta de nuevo.',
-      'post-creation-failed': 'Error al crear la publicación. Intenta de nuevo.',
-      'user-id-required': 'Error interno: Falta el ID de usuario.',
-      
-      // Default
-      'default': 'Ocurrió un error inesperado. Intenta nuevamente.'
+      'image-upload-failed': 'Error al subir la imagen',
+      'post-creation-failed': 'Error al crear la publicación',
+      'user-id-required': 'Error interno: Falta el ID de usuario',
+      'default': 'Ocurrió un error inesperado',
     };
 
-    const errorCode = error.message === 'image-upload-failed' || 
-                      error.message === 'post-creation-failed' ||
-                      error.message === 'user-id-required'
-        ? error.message
-        : error.code || 'default';
+    const errorCode = ['image-upload-failed', 'post-creation-failed', 'user-id-required'].includes(error.message)
+      ? error.message
+      : error.code || 'default';
 
-    const messageToDisplay = errorMap[errorCode] || errorMap['default'];
-    
-    console.error('[PostPresenter] handleError ejecutado. Código de error mapeado:', errorCode, 'Mensaje original:', error.message, 'Error completo:', error);
-    this.view.showError(messageToDisplay);
+    const message = errorMap[errorCode] || errorMap.default;
+
+    console.error(`[PostPresenter] Error: ${message}`, error);
+    this.view.showError(message);
   }
 }

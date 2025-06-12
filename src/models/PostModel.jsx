@@ -1,93 +1,72 @@
 // src/models/PostModel.js
-import { db, storage, auth } from '../../firebaseConfig'; // Esta importación es clave
+import { db, auth } from '../../firebaseConfig';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export default class PostModel {
   /**
-   * Sube una imagen a Firebase Storage
-   * @param {string} uri - URI local de la imagen
-   * @returns {Promise<string>} URL pública de la imagen
+   * Sube una imagen a Azure Blob Storage usando SAS token
+   * @param {string} uri - URI local del archivo (por ejemplo, imagen desde FilePicker)
+   * @returns {Promise<string>} URL pública del archivo subido
    */
   static async uploadImage(uri) {
-    // ----- INICIO DE VERIFICACIÓN IMPORTANTE -----
-    console.log("[PostModel.uploadImage] VERIFICANDO 'storage' (importado):", storage);
-    // ----- FIN DE VERIFICACIÓN IMPORTANTE -----
-
-    if (!storage) { // Comprobación explícita
-      console.error("[PostModel.uploadImage] ¡ERROR CRÍTICO: La instancia 'storage' importada es undefined o null!");
-      console.error("[PostModel.uploadImage] Revisa tu archivo '../../firebaseConfig.js' y asegúrate de que 'storage' se inicializa y exporta correctamente.");
-      throw new Error('firebase-storage-not-initialized');
-    }
+    const sasToken = "sv=2024-11-04&ss=bfqt&srt=co&sp=rwdlacupiytfx&se=2025-06-14T13:38:33Z&st=2025-06-12T05:38:33Z&spr=https&sig=vvO7VZRuFLCxkeiVGnoS00BKEm7TPh0Vuzj7vAwDTb4%3D";
+    const accountName = "solicitudesarchivos";
+    const containerName = "solicitudesarchivos";
 
     try {
-      // 1. Crear referencia única para la imagen
-      const timestamp = new Date().getTime();
-      const nombreImagen = `posts/${timestamp}_${Math.random().toString(36).substring(2, 8)}`;
-      
-      const imageRef = ref(storage, nombreImagen); // 'storage' DEBE ser válido aquí
-
-      // ----- INICIO DE VERIFICACIÓN DE imageRef -----
-      console.log("[PostModel.uploadImage] VERIFICANDO 'imageRef' (resultado de ref()):", imageRef);
-      if (!imageRef || typeof imageRef.bucket === 'undefined' || typeof imageRef.fullPath === 'undefined') {
-        console.error("[PostModel.uploadImage] ¡ERROR CRÍTICO: 'imageRef' no es una referencia de Storage válida!", imageRef);
-        console.error("[PostModel.uploadImage] Esto puede pasar si 'storage' era inválido o la ruta es incorrecta de forma severa.");
-        throw new Error('invalid-storage-reference');
-      }
-      console.log(`[PostModel.uploadImage] Intentando subir a: gs://${imageRef.bucket}/${imageRef.fullPath}`);
-      // ----- FIN DE VERIFICACIÓN DE imageRef -----
-      
-      // 2. Convertir URI a blob
+      // 1. Obtener blob desde la URI
       const response = await fetch(uri);
       if (!response.ok) {
-        const errorText = await response.text(); // Obtener más detalles del error de fetch
-        console.error(`[PostModel.uploadImage] Falló fetch para la imagen URI: ${uri}. Status: ${response.status}. Respuesta: ${errorText}`);
-        throw new Error('Failed to fetch image');
+        throw new Error(`Fetch fallido. Status: ${response.status}`);
       }
       const blob = await response.blob();
-      console.log(`[PostModel.uploadImage] Blob creado. Tipo: ${blob.type}, Tamaño: ${blob.size}`);
-      
-      // 3. Subir a Firebase Storage
-      console.log("[PostModel.uploadImage] Intentando uploadBytes...");
-      await uploadBytes(imageRef, blob); // Si imageRef es malo, esto fallará con el error _location
-      console.log("[PostModel.uploadImage] uploadBytes completado exitosamente.");
-      
-      // 4. Obtener URL pública
-      console.log("[PostModel.uploadImage] Intentando getDownloadURL...");
-      const downloadURL = await getDownloadURL(imageRef); // También necesita un imageRef válido
-      console.log("[PostModel.uploadImage] getDownloadURL exitoso:", downloadURL);
-      
-      return downloadURL;
+      const contentType = blob.type || 'application/octet-stream';
+
+      // 2. Generar nombre único para el archivo
+      const timestamp = new Date().getTime();
+      const randomStr = Math.random().toString(36).substring(2, 8);
+      const fileName = `posts/${timestamp}_${randomStr}`;
+
+      // 3. Construir URL destino con SAS token
+      const azureURL = `https://${accountName}.blob.core.windows.net/${containerName}/${fileName}?${sasToken}`;
+
+      // 4. Subir archivo con método PUT
+      const uploadRes = await fetch(azureURL, {
+        method: "PUT",
+        headers: {
+          "x-ms-blob-type": "BlockBlob",
+          "Content-Type": contentType
+        },
+        body: blob
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error(`Error al subir a Azure. Status: ${uploadRes.status}`);
+      }
+
+      // 5. URL pública del blob
+      const publicURL = `https://${accountName}.blob.core.windows.net/${containerName}/${fileName}`;
+      console.log("[PostModel.uploadImage] Subido exitosamente a Azure:", publicURL);
+      return publicURL;
 
     } catch (error) {
-      console.error('[PostModel.uploadImage] Error durante la subida de imagen:', error);
-      // Si el error es uno de los que lanzamos explícitamente, relánzalo.
-      if (error.message === 'firebase-storage-not-initialized' || error.message === 'invalid-storage-reference' || error.message === 'Failed to fetch image') {
-        throw error;
-      }
-      // Para otros errores (incluido el TypeError original si las comprobaciones fallan), lanza el genérico.
-      throw new Error('image-upload-failed');
+      console.error('[PostModel.uploadImage] Error subiendo imagen a Azure:', error);
+      throw new Error('azure-image-upload-failed');
     }
   }
 
-  /**
-   * Crea un nuevo post en Firestore
-   * @param {object} postData - Datos del post
-   * (El resto de tus campos JSDoc están bien)
-   */
   static async createPost(postData) {
     try {
-      // Validación básica de datos requeridos
       if (!postData.userId) {
-        console.error("[PostModel.createPost] Error: userId es requerido.");
+        console.error("[PostModel.createPost] userId es requerido.");
         throw new Error('user-id-required');
       }
-      
+
       const postWithMetadata = {
         ...postData,
-        createdAt: serverTimestamp(), // Correcto
-        status: 'active', 
-        views: 0 
+        createdAt: serverTimestamp(),
+        status: 'active',
+        views: 0
       };
 
       const docRef = await addDoc(collection(db, 'posts'), postWithMetadata);
@@ -95,21 +74,14 @@ export default class PostModel {
       return docRef.id;
     } catch (error) {
       console.error('[PostModel.createPost] Error creando post:', error);
-      // Podrías querer ser más específico con los errores de Firestore aquí si es necesario
       throw new Error('post-creation-failed');
     }
   }
 
-  /**
-   * Obtiene el usuario actual autenticado
-   * @returns {import('firebase/auth').User|null}
-   */
   static getCurrentUser() {
-    // No es necesario un try-catch aquí, auth.currentUser es síncrono y no lanza errores.
-    // Simplemente devuelve null si no hay usuario.
     if (!auth) {
-        console.warn("[PostModel.getCurrentUser] La instancia 'auth' no está inicializada. Revisa firebaseConfig.js.");
-        return null;
+      console.warn("[PostModel.getCurrentUser] La instancia 'auth' no está inicializada.");
+      return null;
     }
     return auth.currentUser;
   }

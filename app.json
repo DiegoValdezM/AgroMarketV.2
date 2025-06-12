@@ -19,14 +19,17 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": [
-      ]
+      "permissions": [],
+      "package": "com.valdez28663.AgroMarket"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "newArchEnabled": true
+      "newArchEnabled": true,
+      "eas": {
+        "projectId": "54a6397a-0770-4e2a-9523-b305622eb284"
+      }
     }
   }
 }

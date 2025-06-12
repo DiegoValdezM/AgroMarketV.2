@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Communications from 'react-native-communications';
+import * as Linking from 'expo-linking';
 import { getAuth } from 'firebase/auth';
 
 const Publicacion = ({ publicacion, onDelete, onEdit }) => {
@@ -11,7 +11,7 @@ const Publicacion = ({ publicacion, onDelete, onEdit }) => {
 
   const handleCall = () => {
     if (publicacion.contacto) {
-      Communications.phonecall(publicacion.contacto, true);
+      Linking.openURL(`tel:${publicacion.contacto}`);
     } else {
       Alert.alert('contacto', 'Número no disponible');
     }

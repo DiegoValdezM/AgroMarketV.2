@@ -97,37 +97,27 @@ export const ChatProvider = ({ children }) => {
 
     try {
       const messagesCollectionRef = collection(db, `chats/${chatRoomIdGenerated}/messages`);
-      const q_messages = query(messagesCollectionRef, orderBy("time", "asc"));
+      const q_messages = query(messagesCollectionRef, orderBy("time", "asc")); // Renombré q a q_messages
 
-      console.log(`[ChatProvider selectChat] Configurando onSnapshot para: chats/${chatRoomIdGenerated}/messages`);
-
-      const unsubscribe = onSnapshot(q_messages,
-        (querySnapshot) => { // CALLBACK DE ÉXITO
-          console.log(`[ChatProvider selectChat] ONSNAPSHOT SUCCESS: Recibido snapshot para ${chatRoomIdGenerated}. Documentos: ${querySnapshot.docs.length}. isEmpty: ${querySnapshot.empty}`);
-          const messages = [];
-          querySnapshot.forEach((doc) => {
-            messages.push({ id: doc.id, ...doc.data() });
-          });
-
-          console.log(`[ChatProvider selectChat] ONSNAPSHOT SUCCESS: Mensajes procesados (${messages.length}). A punto de llamar a setChatData.`);
-          setChatData(messages);
-          console.log(`[ChatProvider selectChat] ONSNAPSHOT SUCCESS: setChatData llamado. A punto de llamar a setLoadingMessages(false).`);
-          setLoadingMessages(false);
-          console.log(`[ChatProvider selectChat] ONSNAPSHOT SUCCESS: Estados actualizados para ${chatRoomIdGenerated}.`);
-        },
-        (error) => { // CALLBACK DE ERROR
-          console.error(`[ChatProvider selectChat] ONSNAPSHOT ERROR para ${chatRoomIdGenerated}. Objeto de error completo: `, JSON.stringify(error, Object.getOwnPropertyNames(error)));
-          Alert.alert("Error de Chat", `No se pudieron cargar los mensajes (${error.code || 'desconocido'}): ${error.message}`);
-          setLoadingMessages(false);
-          console.log(`[ChatProvider selectChat] ONSNAPSHOT ERROR: setLoadingMessages(false) llamado.`);
-        }
-      );
+      const unsubscribe = onSnapshot(q_messages, (querySnapshot) => {
+        console.log(`[ChatProvider selectChat] Snapshot recibido para ${chatRoomIdGenerated}, ${querySnapshot.docs.length} mensajes.`);
+        const messages = [];
+        querySnapshot.forEach((doc) => {
+          messages.push({ id: doc.id, ...doc.data() });
+        });
+        setChatData(messages);
+        setLoadingMessages(false);
+      }, (error) => {
+        console.error(`[ChatProvider selectChat] Error en onSnapshot para ${chatRoomIdGenerated}: `, JSON.stringify(error, Object.getOwnPropertyNames(error)));
+        Alert.alert("Error de Chat", "No se pudieron cargar los mensajes: " + error.message);
+        setLoadingMessages(false);
+      });
 
       setActiveChatListenerUnsubscribe(() => unsubscribe);
-      console.log(`[ChatProvider selectChat] Listener de onSnapshot configurado y guardado para ${chatRoomIdGenerated}.`);
+      console.log(`[ChatProvider selectChat] Listener configurado para ${chatRoomIdGenerated}.`);
     } catch (error) {
-      console.error("[ChatProvider selectChat] Error síncrono configurando listener de mensajes (ej: collection() o query()):", error);
-      Alert.alert("Error Crítico de Configuración", "No se pudo configurar el chat: " + error.message);
+      console.error("[ChatProvider selectChat] Error configurando listener de mensajes:", error);
+      Alert.alert("Error Crítico", "No se pudo configurar el chat: " + error.message);
       setLoadingMessages(false);
     }
   }, [activeChatListenerUnsubscribe, firebaseAuth, db]); // Dependencias actualizadas
