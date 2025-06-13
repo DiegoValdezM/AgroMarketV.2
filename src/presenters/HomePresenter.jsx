@@ -18,24 +18,23 @@ export default class HomePresenter {
     const user = auth.currentUser;
     if (user) {
       try {
-        // MUY IMPORTANTE: Asegúrate que 'users' es el nombre exacto de tu colección de usuarios
-        // donde guardas el campo 'role'. Si es 'usuarios' o cualquier otro, cámbialo aquí.
-        const userDocRef = doc(db, 'usuarios', user.uid); // <--- ¡VERIFICA ESTA LÍNEA!
-        console.log(`[HomePresenter] Intentando obtener documento de usuario para UID: ${user.uid} en colección 'users'`);
+        // MUY IMPORTANTE: Asegúrate que 'usuarios' es el nombre exacto de tu colección de usuarios
+        // donde guardas el campo 'role'.
+        const userDocRef = doc(db, 'usuarios', user.uid); 
+        console.log(`[HomePresenter] Intentando obtener documento de usuario para UID: ${user.uid} en colección 'usuarios'`);
         const userDocSnap = await getDoc(userDocRef);
 
         if (userDocSnap.exists()) {
           const userData = userDocSnap.data();
-          // Asegura que 'role' es el nombre exacto del campo que guarda el rol. Si es 'rol', cámbialo.
-          this.currentUserRole = userData.role || 'user'; // <--- ¡VERIFICA ESTA LÍNEA!
+          // Asegura que 'role' es el nombre exacto del campo que guarda el rol.
+          this.currentUserRole = userData.role || 'user'; 
           console.log("[HomePresenter] Rol del usuario encontrado en Firestore:", this.currentUserRole);
           // Informar a la vista si el usuario es administrador
           if (this.view.setAdminStatus) {
               this.view.setAdminStatus(this.currentUserRole === 'admin');
           }
         } else {
-          // Este es el LOG que te estaba saliendo.
-          console.log("[HomePresenter] Documento de usuario NO encontrado en Firestore con el UID proporcionado en la colección 'users'. Asumiendo rol 'user'.");
+          console.log("[HomePresenter] Documento de usuario NO encontrado en Firestore con el UID proporcionado en la colección 'usuarios'. Asumiendo rol 'user'.");
           this.currentUserRole = 'user';
           if (this.view.setAdminStatus) {
               this.view.setAdminStatus(false);
@@ -78,16 +77,17 @@ export default class HomePresenter {
 
           let userName = 'Usuario Desconocido';
           let userPhoto = null;
+          let userEmail = null; 
 
           if (postUserId) {
-            // Consulta la información del usuario desde la colección 'users'
-            // ¡VERIFICA ESTA LÍNEA TAMBIÉN SI TU COLECCIÓN NO SE LLAMA 'users'!
-            const userDoc = await getDoc(doc(db, 'users', postUserId));
+            // Consulta la información del usuario desde la colección 'usuarios'
+            const userDoc = await getDoc(doc(db, 'usuarios', postUserId));
             if (userDoc.exists()) {
               const userData = userDoc.data();
               // Asegúrate que 'usuario' sea el nombre de tu campo de nombre y 'photoURL' para la foto
               userName = userData.usuario || 'Usuario Desconocido';
               userPhoto = userData.photoURL || null;
+              userEmail = userData.correo || null;
             }
           }
 
@@ -96,6 +96,7 @@ export default class HomePresenter {
             ...publicacionData,
             userName: userName,
             userPhoto: userPhoto,
+            userEmail: userEmail,
           };
         });
 
@@ -124,7 +125,7 @@ export default class HomePresenter {
     const searchLower = searchText.toLowerCase();
     return originalPublicaciones.filter(pub => {
       const searchFields = [
-        pub.title, // Asumiendo que el campo es 'title' y no 'titulo'
+        pub.title, 
         pub.description,
         pub.userName,
         pub.location
@@ -142,10 +143,7 @@ export default class HomePresenter {
    */
   async deletePost(postId) {
     try {
-      // En un caso real, aquí validarías que el userId actual coincide
-      // con el userId de la publicación o que el usuario es admin antes de eliminar
       await deleteDoc(doc(db, 'posts', postId));
-      // La actualización de la lista en la UI se manejará automáticamente por el listener de onSnapshot
     } catch (error) {
       console.error('Error al eliminar post:', error);
       throw new Error('No se pudo eliminar la publicación.');
@@ -161,18 +159,26 @@ export default class HomePresenter {
 
   navigateToForm() {
     if (this.navigation) {
-      this.navigation.navigate('Form'); // Asumiendo que la ruta se llama 'CreatePost'
+      this.navigation.navigate('Form');
     } else {
-      console.warn("Navegación no disponible en HomePresenter para 'CreatePost'.");
+      console.warn("Navegación no disponible en HomePresenter para 'Form'.");
     }
   }
 
-  // Nuevo método para navegar a la pantalla de gestión de usuarios
   navigateToUsersManagement() {
     if (this.navigation) {
-      this.navigation.navigate('Admin'); // Asegúrate que 'UsersManagement' sea el nombre de tu ruta
+      this.navigation.navigate('Admin');
     } else {
-      console.warn("Navegación no disponible en HomePresenter para 'UsersManagement'.");
+      console.warn("Navegación no disponible en HomePresenter para 'Admin'.");
+    }
+  }
+
+  // ESTA ES LA FUNCIÓN QUE PREGUNTABAS
+  navigateToEditProfile() {
+    if (this.navigation) {
+      this.navigation.navigate('EditProfile'); // Asegúrate que 'EditProfile' es el nombre de la ruta
+    } else {
+      console.warn("Navegación no disponible en HomePresenter para 'EditProfile'.");
     }
   }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,60 +8,56 @@ import {
   TouchableOpacity,
   Alert,
   StyleSheet,
-  FlatList
+  FlatList,
+  Image
 } from 'react-native';
 import HomePresenter from '../../presenters/HomePresenter';
 import Publicacion from '../../components/Publicaciones';
-import HomeStyles from '../../styles/homeStyle'; // Tus estilos existentes para publicaciones, etc.
+import HomeStyles from '../../styles/homeStyle';
 
-// IMPORTACIONES PARA EL CHAT Y NOTIFICACIONES
+import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../context/AuthContext';
+
 import { ChatContext } from '../../context/chat';
-import NotificationItem from '../../components/NotificacionesItem';
 
 export default function HomeScreen({ navigation }) {
-  const [loading, setLoading] = useState(true); // Loading para las publicaciones
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [filteredPublicaciones, setFilteredPublicaciones] = useState([]);
   const [originalPublicaciones, setOriginalPublicaciones] = useState([]);
-  // Nuevo estado para controlar si el usuario es administrador
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // OBTENER DATOS Y FUNCIONES DEL CHATCONTEXT
-  const {
-    notifications,
-    selectChat,
-    addDemoNotification,
-    usersList,
-    fetchUsers
-  } = useContext(ChatContext);
+  const { currentUser, userProfile } = useAuth();
 
-  // Creamos la instancia del Presentador y le pasamos los métodos de la Vista y la navegación
+  const { activeChatsList, usersList, fetchUsers } = useContext(ChatContext);
+
+  const totalUnreadMessages = useMemo(() => {
+    return activeChatsList.reduce((sum, chat) => sum + (chat.unreadCount || 0), 0);
+  }, [activeChatsList]);
+
+
   const [presenter] = useState(new HomePresenter({
     showPublicaciones: (data) => {
       setOriginalPublicaciones(data);
       setFilteredPublicaciones(data);
-      setLoading(false); // Solo para la carga de publicaciones
+      setLoading(false);
     },
     showError: (message) => {
       setError(message);
-      setLoading(false); // Solo para la carga de publicaciones
+      setLoading(false);
     },
     navigate: (screen) => navigation.navigate(screen),
-    // Nuevo método para que el Presentador informe a la Vista sobre el estado de admin
     setAdminStatus: (status) => setIsAdmin(status),
-    setLoading: (status) => setLoading(status) // Pasar setLoading para que el presentador maneje el estado de carga general
-  }, navigation)); // Asegúrate de pasar 'navigation' aquí
+    setLoading: (status) => setLoading(status)
+  }, navigation));
 
   useEffect(() => {
-    // Al montar el componente, cargamos las publicaciones y verificamos el rol del usuario
     presenter.loadPublicacionesEnTiempoReal();
 
-    // Cargar usuarios si no se han cargado, para el botón de demo de notificaciones
     if (fetchUsers && (!usersList || usersList.length === 0)) {
       fetchUsers();
     }
-    // Función de limpieza para desuscribirse del listener de publicaciones
     return () => presenter.onDestroy();
   }, [presenter, fetchUsers, usersList, navigation]);
 
@@ -82,44 +78,6 @@ export default function HomeScreen({ navigation }) {
     navigation.navigate('ChatSelection');
   };
 
-  // FUNCIÓN PARA MANEJAR CLIC EN UNA NOTIFICACIÓN
-  const handleNotificationPress = (notification) => {
-    if (notification.partner && notification.chatRoomId) {
-      console.log("[HomeScreen] Abriendo chat desde notificación:", notification.chatRoomId);
-      selectChat(notification.partner);
-      navigation.navigate('Chat');
-    } else {
-      console.warn("Notificación inválida, falta partner o chatRoomId:", notification);
-      Alert.alert("Error", "No se puede abrir esta notificación.");
-    }
-  };
-
-  // FUNCIÓN PARA DISPARAR UNA NOTIFICACIÓN DE DEMO
-  const triggerDemoNotification = () => {
-    if (addDemoNotification) {
-      if (usersList && usersList.length > 0) {
-        const demoPartner = usersList[Math.floor(Math.random() * usersList.length)];
-        if (demoPartner && demoPartner.authUid) {
-          addDemoNotification(
-            { uid: demoPartner.authUid, displayName: demoPartner.nombre, email: demoPartner.correo },
-            `¡Mensaje de ${demoPartner.nombre || demoPartner.email}!`
-          );
-        } else {
-          Alert.alert("Demo", "No se pudo seleccionar un usuario válido para la notificación demo.");
-        }
-      } else {
-        addDemoNotification(
-            { uid: "demoAuthUserUID", displayName: "Usuario Demo", email: "demo@example.com"},
-            "¡Este es un mensaje de prueba de notificación!"
-        );
-        console.warn("[HomeScreen] No hay usuarios en usersList para generar notificación demo realista. Usando datos genéricos.");
-        if (!usersList || usersList.length === 0) fetchUsers();
-      }
-    } else {
-        console.error("addDemoNotification no está disponible en ChatContext");
-    }
-  };
-
   if (loading) return <ActivityIndicator style={styles.centeredLoader} size="large" color="#8a5c9f" />;
   if (error) return <Text style={[HomeStyles.errorText, styles.centeredError]}>{error}</Text>;
 
@@ -129,7 +87,59 @@ export default function HomeScreen({ navigation }) {
         contentContainerStyle={HomeStyles.container}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Header con buscador y botón de nueva publicación */}
+        {/* BOTÓN DE ADMINISTRACIÓN (SOLO VISIBLE SI ES ADMIN) */}
+        {isAdmin && (
+          <TouchableOpacity
+            style={[HomeStyles.addButton, styles.adminButtonTop]}
+            onPress={() => presenter.navigateToUsersManagement()}
+          >
+            <Text style={HomeStyles.addButtonText}>Gestionar Usuarios</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* SECCIÓN SUPERIOR: Info de Usuario (Izquierda) y Botones (Derecha) */}
+        <View style={styles.topHeaderSection}>
+          {/* Información del Usuario (Foto y Nombre) */}
+          {currentUser && userProfile && (
+            <View style={styles.userProfileSummary}>
+              <Image
+                source={userProfile.photoURL ? { uri: userProfile.photoURL } : require('../../../assets/profile-icon.webp')}
+                style={styles.profileImageSmall}
+              />
+              <Text style={styles.userNameSummary} numberOfLines={1} ellipsizeMode="tail">
+                {userProfile.nombre || 'Mi Perfil'}
+              </Text>
+            </View>
+          )}
+
+          {/* Contenedor de Botones (Notificaciones y Ajustes) */}
+          <View style={styles.headerButtonsContainer}>
+            {/* BOTÓN DE NOTIFICACIONES/MENSAJES SIN LEER */}
+            <TouchableOpacity
+              style={styles.notificationsButton}
+              onPress={handleNavigateToChatSelection}
+            >
+              <Text style={styles.notificationsButtonText}>Notificaciones</Text>
+              {totalUnreadMessages > 0 && (
+                <View style={styles.unreadCountBadge}>
+                  <Text style={styles.unreadCountText}>{totalUnreadMessages}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* ÍCONO DE AJUSTES/CONFIGURACIÓN (SOLO SI EL USUARIO ESTÁ LOGUEADO) */}
+            {currentUser && (
+              <TouchableOpacity
+                style={styles.settingsIcon}
+                onPress={() => presenter.navigateToEditProfile()}
+              >
+                <Ionicons name="settings-outline" size={24} color="#555" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+        
+        {/* HEADER CON BUSCADOR Y BOTÓN DE NUEVA PUBLICACIÓN */}
         <View style={HomeStyles.header}>
           <TextInput
             style={HomeStyles.searchBar}
@@ -149,40 +159,7 @@ export default function HomeScreen({ navigation }) {
             <Text style={HomeStyles.addButtonText}>+ Nueva</Text>
           </TouchableOpacity>
         </View>
-
-        {/* Botón de ADMINISTRACIÓN (SOLO VISIBLE SI ES ADMIN) */}
-        {isAdmin && (
-          <TouchableOpacity
-            style={[HomeStyles.addButton, styles.adminButton]}
-            onPress={() => presenter.navigateToUsersManagement()}
-          >
-            <Text style={HomeStyles.addButtonText}>Gestionar Usuarios</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* SECCIÓN DE NOTIFICACIONES DE CHAT */}
-        <View style={HomeStyles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={HomeStyles.sectionTitle}>Nuevos Mensajes</Text>
-            <TouchableOpacity onPress={triggerDemoNotification} style={styles.demoButton}>
-                <Text style={styles.demoButtonText}>+ Notif Demo</Text>
-            </TouchableOpacity>
-          </View>
-          {notifications && notifications.length > 0 ? (
-            <View style={styles.notificationsListContainer}>
-              {notifications.map(item => (
-                   <NotificationItem
-                      key={item.id.toString()}
-                      notification={item}
-                      onPress={() => handleNotificationPress(item)}
-                    />
-              ))}
-            </View>
-          ) : (
-            <Text style={HomeStyles.emptyText ?? styles.emptyNotificationText}>No tienes mensajes nuevos.</Text>
-          )}
-        </View>
-
+        
         {/* Sección de publicaciones */}
         <View style={HomeStyles.section}>
           <View style={HomeStyles.sectionHeader}>
@@ -221,7 +198,7 @@ export default function HomeScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      {/* Botón Flotante para Chat */}
+      {/* Botón Flotante para Chat (Considera si este es redundante ahora) */}
       <TouchableOpacity
         style={styles.chatFab}
         onPress={handleNavigateToChatSelection}
@@ -236,6 +213,7 @@ export default function HomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   screenContainer: {
     flex: 1,
+    backgroundColor: '#f5f5f5',
   },
   centeredLoader: {
     flex: 1,
@@ -247,29 +225,76 @@ const styles = StyleSheet.create({
     marginTop: 50,
     color: 'red',
   },
-  sectionHeaderRow: {
+  topHeaderSection: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    marginBottom: 15,
+    width: '100%',
   },
-  demoButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+  userProfileSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  profileImageSmall: {
+    width: 35,
+    height: 35,
+    borderRadius: 17.5,
+    marginRight: 8,
+    backgroundColor: '#ddd',
+  },
+  userNameSummary: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    flexShrink: 1,
+  },
+  headerButtonsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  notificationsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#e0e0e0',
-    borderRadius: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  demoButtonText: {
-    fontSize: 12,
-    color: '#333'
+  notificationsButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginRight: 3,
   },
-  notificationsListContainer: {
-    // Estilos para el contenedor de la lista de notificaciones si es necesario
+  unreadCountBadge: {
+    backgroundColor: '#f44336',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    marginLeft: 3,
   },
-  emptyNotificationText: {
-    textAlign: 'center',
-    paddingVertical: 20,
-    color: '#666',
+  unreadCountText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  settingsIcon: {
+    padding: 5,
+    marginLeft: 5,
   },
   chatFab: {
     position: 'absolute',
@@ -291,13 +316,18 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#fff',
   },
-  // Estilo específico para el botón de administración
-  adminButton: {
-    marginTop: 10,
+  adminButtonTop: {
     backgroundColor: '#3498db',
     alignSelf: 'center',
-    width: '90%',
-    paddingVertical: 12,
+    width: '95%',
+    paddingVertical: 15,
+    marginTop: 10,
     marginBottom: 10,
-  }
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
 });

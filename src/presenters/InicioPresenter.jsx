@@ -12,4 +12,8 @@ export default class InicioPresenter {
     navigateToSingIn() {
       this.navigation.navigate('SignIn'); // Navega a la pantalla de Registro
     }
+
+    navigateToForgotPassword() {
+    this.navigation.navigate('ForgotPassword'); // 'ForgotPassword' será el nombre de tu nueva ruta
+    }
   }

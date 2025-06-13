@@ -1,19 +1,52 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { getAuth } from 'firebase/auth';
+import { useNavigation } from '@react-navigation/native';
+import { ChatContext } from '../context/chat';
 
 const Publicacion = ({ publicacion, onDelete, onEdit }) => {
   const auth = getAuth();
   const currentUser = auth.currentUser;
   const isOwner = currentUser && currentUser.uid === publicacion.userId;
 
+  const navigation = useNavigation();
+  const { selectChat } = useContext(ChatContext);
+
+  console.log(`[Publicacion] Publicacion ID: ${publicacion.id}, userName: ${publicacion.userName}, userPhoto: ${publicacion.userPhoto}, userEmail: ${publicacion.userEmail}`);
+
   const handleCall = () => {
     if (publicacion.contacto) {
       Linking.openURL(`tel:${publicacion.contacto}`);
     } else {
-      Alert.alert('contacto', 'Número no disponible');
+      Alert.alert('Contacto', 'Número de contacto no disponible para esta publicación.');
+    }
+  };
+
+  const handleMessage = () => {
+    if (!currentUser) {
+      Alert.alert('Inicia Sesión', 'Debes iniciar sesión para enviar un mensaje.');
+      return;
+    }
+
+    if (currentUser.uid === publicacion.userId) {
+      Alert.alert('Aviso', 'No puedes chatear contigo mismo.');
+      return;
+    }
+
+    const chatPartner = {
+      uid: publicacion.userId,
+      displayName: publicacion.userName || publicacion.userEmail || 'Usuario',
+      email: publicacion.userEmail || publicacion.userId + '@no-email.com',
+      photoURL: publicacion.userPhoto || null,
+    };
+
+    if (chatPartner.uid) {
+      selectChat(chatPartner);
+      navigation.navigate('Chat');
+    } else {
+      Alert.alert('Error', 'No se pudo iniciar el chat. Falta información del usuario.');
     }
   };
 
@@ -32,12 +65,15 @@ const Publicacion = ({ publicacion, onDelete, onEdit }) => {
     <View style={styles.publicationCard}>
       {/* Header con información del usuario */}
       <View style={styles.userHeader}>
-        <Image 
-          source={publicacion.userPhoto ? { uri: publicacion.userPhoto } : require('../../assets/3.jpg')} 
+        <Image
+          source={publicacion.userPhoto ? { uri: publicacion.userPhoto } : require('../../assets/profile-icon.webp')}
           style={styles.userImage}
         />
-        <Text style={styles.userName}>{publicacion.userName || 'Wey'}</Text>
-        
+        {/* ¡CAMBIO CLAVE AQUÍ! Mostrar "Yo" si es el dueño */}
+        <Text style={styles.userName}>
+          {isOwner ? 'Yo' : (publicacion.userName || 'Usuario Desconocido')}
+        </Text>
+
         {isOwner && (
           <View style={styles.actionsContainer}>
             <TouchableOpacity onPress={() => onEdit(publicacion)}>
@@ -51,12 +87,12 @@ const Publicacion = ({ publicacion, onDelete, onEdit }) => {
       </View>
 
       {/* Contenido de la publicación */}
-      <Image 
-        source={{ uri: publicacion.imageUrl }} 
-        style={styles.publicationImage} 
+      <Image
+        source={{ uri: publicacion.imageUrl }}
+        style={styles.publicationImage}
         resizeMode="cover"
       />
-      
+
       <View style={styles.publicationContent}>
         <Text style={styles.publicationTitle}>{publicacion.title}</Text>
         <View style={styles.locationContainer}>
@@ -67,14 +103,26 @@ const Publicacion = ({ publicacion, onDelete, onEdit }) => {
         <Text style={styles.publicationPrice}>${publicacion.price}</Text>
       </View>
 
-      {/* Botón de contacto */}
-      <TouchableOpacity
-        style={styles.contactButton}
-        onPress={handleCall}
-      >
-        <Ionicons name="call-outline" size={20} color="#fff" />
-        <Text style={styles.contactText}>Contactar</Text>
-      </TouchableOpacity>
+      {/* Botones de Contacto: Llamar y Mensaje */}
+      <View style={styles.contactButtonsContainer}>
+        <TouchableOpacity
+          style={[styles.contactButton, styles.callButton]}
+          onPress={handleCall}
+        >
+          <Ionicons name="call-outline" size={20} color="#fff" />
+          <Text style={styles.contactText}>Llamar</Text>
+        </TouchableOpacity>
+
+        {!isOwner && (
+          <TouchableOpacity
+            style={[styles.contactButton, styles.messageButton]}
+            onPress={handleMessage}
+          >
+            <Ionicons name="chatbubble-outline" size={20} color="#fff" />
+            <Text style={styles.contactText}>Mensaje</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 };
@@ -148,15 +196,26 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#8a5c9f',
   },
-  contactButton: {
+  contactButtonsContainer: {
     flexDirection: 'row',
-    backgroundColor: '#8a5c9f',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    gap: 10,
+  },
+  contactButton: {
+    flex: 1,
+    flexDirection: 'row',
     paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 10,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
+  },
+  callButton: {
+    backgroundColor: '#8a5c9f',
+  },
+  messageButton: {
+    backgroundColor: '#007bff',
   },
   contactText: {
     color: '#fff',

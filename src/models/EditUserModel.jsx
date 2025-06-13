@@ -1,46 +1,55 @@
 // src/models/EditUserModel.js
-import { db, auth } from '../../firebaseConfig'; // Solo db y auth, storage no se usa aquí directamente
-import { serverTimestamp, doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../firebaseConfig'; // Solo necesitamos la instancia de Firestore
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'; // Usamos setDoc con merge
 
 export default class EditUserModel {
 
-  static getCurrentAdminUser() { // O simplemente getCurrentUser si es genérico
-    return auth.currentUser;
-  }
-
-  static getServerTimestamp() {
-    return serverTimestamp();
-  }
-
-  static async updateUser(userId, dataToUpdate) {
-    console.log(`[EditUserModel] updateUser llamado. UserID: ${userId}, Datos:`, dataToUpdate);
+  /**
+   * Obtiene los datos de un perfil de usuario específico desde Firestore.
+   * Útil para cargar la información al inicio de EditUserScreen.
+   * @param {string} userId - UID del usuario a obtener.
+   * @returns {Promise<object | null>} Datos del perfil del usuario, o null si no existe.
+   */
+  static async getUserProfileById(userId) {
+    if (!userId) {
+      console.error("[EditUserModel.getUserProfileById] userId es requerido.");
+      return null;
+    }
     try {
-      if (!userId) {
-        console.error("[EditUserModel] ID del usuario es requerido para actualizar.");
-        throw new Error('user-id-required-for-update');
+      const userDocRef = doc(db, 'usuarios', userId); // Colección 'usuarios'
+      const userDocSnap = await getDoc(userDocRef);
+      if (userDocSnap.exists()) {
+        return userDocSnap.data();
+      } else {
+        console.log("[EditUserModel.getUserProfileById] Documento de usuario no encontrado para UID:", userId);
+        return null;
       }
-      const userRef = doc(db, 'usuarios', userId); // 'usuarios' es tu colección
-
-      await updateDoc(userRef, dataToUpdate);
-      console.log('[EditUserModel] Usuario actualizado exitosamente en Firestore:', userId);
-      return true;
     } catch (error) {
-      console.error('[EditUserModel] Error actualizando usuario en Firestore:', userId, error);
+      console.error("[EditUserModel.getUserProfileById] Error obteniendo perfil de usuario por ID:", error);
+      throw new Error('user-profile-fetch-failed');
+    }
+  }
+
+  /**
+   * Actualiza los datos del perfil de un usuario específico en Firestore.
+   * Esta función es para uso administrativo, permitiendo actualizar cualquier usuario.
+   * Utiliza setDoc con merge: true para crear el documento si no existe y evitar sobrescrituras.
+   * @param {string} userId - UID del usuario cuyo perfil se actualizará.
+   * @param {object} userData - Objeto con los campos a actualizar en Firestore.
+   */
+  static async updateUser(userId, userData) {
+    if (!userId) {
+      console.error("[EditUserModel.updateUser] userId es requerido para la actualización.");
+      throw new Error('user-id-required-for-update');
+    }
+    try {
+      const userDocRef = doc(db, 'usuarios', userId); // Apuntamos directamente al documento por su UID
+      await setDoc(userDocRef, { ...userData, updatedAt: serverTimestamp() }, { merge: true });
+      console.log("[EditUserModel.updateUser] Perfil de usuario actualizado/creado para UID:", userId);
+    } catch (error) {
+      console.error("[EditUserModel.updateUser] Error actualizando usuario en Firestore:", error);
       throw new Error('user-update-failed');
     }
   }
 
-  // Ejemplo conceptual de cómo se podría llamar a una Cloud Function (esto no funcionará sin la CF)
-  // static async updateUserRoleClaim(userId, newRole) {
-  //   console.log(`[EditUserModel] Solicitando actualizar Custom Claim para ${userId} a ${newRole} vía Cloud Function.`);
-  //   try {
-  //     const setAdminRoleFunction = firebase.functions().httpsCallable('setCustomUserRole'); // Necesitas definir esta CF
-  //     const response = await setAdminRoleFunction({ uidToUpdate: userId, roleToSet: newRole });
-  //     console.log("[EditUserModel] Respuesta de Cloud Function para Custom Claim:", response);
-  //     return response.data;
-  //   } catch (error) {
-  //     console.error("[EditUserModel] Error llamando a Cloud Function para Custom Claim:", error);
-  //     throw new Error("custom-claim-update-failed");
-  //   }
-  // }
 }

@@ -3,27 +3,32 @@ import { View, Text, ImageBackground, Image, TouchableOpacity, StyleSheet, Dimen
 import { FontAwesome } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useNavigation } from '@react-navigation/native';
-import InicioPresenter from '../../presenters/InicioPresenter';
-import inicioStyle from '../../styles/inicioStyle';
+import InicioPresenter from '../../presenters/InicioPresenter'; // Asegúrate que la ruta es correcta
+import inicioStyle from '../../styles/inicioStyle'; // Asegúrate que la ruta es correcta
 
 
 export default function Inicio() {
   const navigation = useNavigation();
 
-  // Crear una instancia del Presentador y pasarle la Vista y la navegación
   const presenter = new InicioPresenter(
     {
-      // Métodos de la Vista (si los necesitas)
+      // Puedes añadir métodos de la vista aquí si InicioPresenter los necesita para feedback
+      // Por ejemplo: showMessage: (msg) => Alert.alert('Info', msg)
     },
     navigation
   );
 
   const handleLogin = () => {
-    presenter.navigateToLogin(); // Delegar la navegación al Presentador
+    presenter.navigateToLogin();
   };
 
   const handleSingIn = () => {
-    presenter.navigateToSingIn(); // Delegar la navegación al Presentador
+    presenter.navigateToSingIn();
+  };
+
+  // Nuevo manejador para el enlace de "Recuperar Contraseña"
+  const handleForgotPassword = () => {
+    presenter.navigateToForgotPassword(); // Delegar la navegación al Presentador
   };
 
   return (
@@ -46,21 +51,17 @@ export default function Inicio() {
         <TouchableOpacity style={inicioStyle.loginButton} onPress={handleLogin}>
           <Text style={inicioStyle.loginText}>INICIAR SESIÓN</Text>
         </TouchableOpacity>
+
         <TouchableOpacity onPress={handleSingIn}>
           <Text style={inicioStyle.registerText}>REGÍSTRESE</Text>
         </TouchableOpacity>
-        <View style={inicioStyle.socialContainer}>
-          <TouchableOpacity style={inicioStyle.socialButton}>
-            <FontAwesome name="apple" size={40} color="black" />
-          </TouchableOpacity>
-          <TouchableOpacity style={inicioStyle.socialButton}>
-            <FontAwesome name="facebook" size={40} color="#3b5998" />
-          </TouchableOpacity>
-          <TouchableOpacity style={inicioStyle.socialButton}>
-            <FontAwesome name="google" size={40} color="#db4437" />
-          </TouchableOpacity>
-        </View>
+
+        {/* NUEVO ENLACE DE RECUPERAR CONTRASEÑA */}
+        <TouchableOpacity onPress={handleForgotPassword} style={inicioStyle.forgotPasswordButton}>
+          <Text style={inicioStyle.forgotPasswordText}>¿Olvidó su contraseña?</Text>
+        </TouchableOpacity>
       </ImageBackground>
     </View>
   );
 }
+

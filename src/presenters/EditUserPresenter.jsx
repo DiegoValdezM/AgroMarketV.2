@@ -1,6 +1,7 @@
-// src/presenters/EditUserPresenter.jsx
-import EditUserModel from '../models/EditUserModel'; // Usará el nuevo EditUserModel
+// src/presenters/EditUserPresenter.jsx (Modificado)
+import EditUserModel from '../models/EditUserModel'; // ¡CAMBIO CLAVE! Importamos el nuevo modelo
 import { Alert } from 'react-native';
+import { serverTimestamp } from 'firebase/firestore'; // Necesario para serverTimestamp si no se pasa desde el modelo
 
 export default class EditUserPresenter {
   constructor(view) {
@@ -20,30 +21,29 @@ export default class EditUserPresenter {
       this.view.showError('Nombre y correo son obligatorios.');
       return;
     }
-    if (!['user', 'admin'].includes(role)) { // Asegurar que el rol sea válido
+    if (!['user', 'admin'].includes(role)) {
         this.view.showError('Rol no válido seleccionado.');
         return;
     }
 
     try {
-      // this.view.showLoading(); // Ya se maneja en la vista
-
-      // No es necesario obtener el currentUser aquí si la acción es de un admin sobre otro usuario.
-      // La protección de quién puede acceder a la pantalla EditUserScreen ya debería estar hecha.
+      // No es necesario obtener el currentUser aquí.
+      // La protección de quién puede acceder a la pantalla EditUserScreen ya debe estar hecha en la vista.
 
       const dataToUpdateInFirestore = {
         nombre: nombre.trim(),
         apellidos: apellidos.trim(),
-        correo: correo.trim(), // Solo actualiza Firestore, no el email de Auth
+        correo: correo.trim(),
         role,
         telefono: telefono.trim(),
         ubicacion: ubicacion.trim(),
         usuario: usuario.trim(),
-        isActive, // Actualiza el estado de actividad
-        updatedAt: EditUserModel.getServerTimestamp(), // Añadir campo de fecha de actualización
+        isActive,
+        // updatedAt: serverTimestamp(), // Esto ya se maneja dentro de EditUserModel.updateUser
       };
 
       console.log("[EditUserPresenter] Datos finales para actualizar en Firestore:", JSON.stringify(dataToUpdateInFirestore, null, 2));
+      // ¡CAMBIO CLAVE! Llamamos al método updateUser del nuevo modelo
       await EditUserModel.updateUser(userId, dataToUpdateInFirestore);
       console.log("[EditUserPresenter] Usuario actualizado en Firestore. ID:", userId);
 
@@ -51,11 +51,7 @@ export default class EditUserPresenter {
 
       // IMPORTANTE: Si el rol cambió, se DEBERÍA llamar a una Cloud Function aquí
       // para actualizar los Custom Claims del usuario en Firebase Authentication.
-      // Ejemplo conceptual:
-      // if (userDataFromView.role !== originalUserRole) { // Necesitarías la 'originalUserRole'
-      //   console.log(`[EditUserPresenter] El rol cambió. Se debería llamar a una Cloud Function para actualizar Custom Claims para el usuario ${userId} a ${userDataFromView.role}.`);
-      //   // await EditUserModel.updateUserRoleClaim(userId, userDataFromView.role); // Esto sería un método que llama a una CF
-      // }
+      // (Esta parte es conceptual y requiere implementación de Cloud Functions)
 
     } catch (error) {
       console.error("[EditUserPresenter] Error en handleUpdateUser:", error.message, error);
@@ -69,7 +65,6 @@ export default class EditUserPresenter {
       'user-id-required-for-update': 'Error interno: Falta el ID del usuario para actualizar.',
       'default': 'Ocurrió un error inesperado. Intenta nuevamente.'
     };
-    // Usar error.message si es uno de los errores personalizados que lanzas (ej., 'user-update-failed')
     const errorCode = ['user-update-failed', 'user-id-required-for-update'].includes(error.message)
         ? error.message
         : error.code || 'default';

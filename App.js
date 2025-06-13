@@ -17,8 +17,10 @@ import AdminView from './src/views/private/adminView';
 import EditView from './src/views/publics/EditPostForm';
 import EditUser from './src/views/publics/EditUserForm';
 //import MainChat from './src/views/publics/MainChat';
-import ChatOptions from './src/views/publics/ChatUserSelection'; // Esta es tu ChatUserSelectionScreen
-import ChatPrueba from './src/views/publics/MainChatPrueba'; // Esta es tu ChatUserSelectionScreen
+import ChatOptions from './src/views/publics/ChatSelectionScreen.jsx'; 
+import Chat from './src/views/publics/MainChat.jsx';
+import EditProfile from './src/views/publics/EditProfileScreen';
+import ForgotPasswordScreen from './src/views/publics/ForgotPasswordScreen';
 
 // Creamos el stack de navegación.
 const Stack = createNativeStackNavigator();
@@ -48,7 +50,7 @@ export default function App() {
             <Stack.Screen name="EditUser" component={EditUser} options={{ title: 'Editar Usuario' }}/>
             <Stack.Screen 
               name="Chat" // Esta es MainChat
-              component={ChatPrueba} 
+              component={Chat} 
               // options={({ route }) => ({ title: route.params?.chatPartnerName || 'Chat' })} // Título dinámico
             />
             <Stack.Screen 
@@ -56,6 +58,8 @@ export default function App() {
               component={ChatOptions} 
               options={{ title: 'Seleccionar Chat' }} 
             />
+            <Stack.Screen name="EditProfile" component={EditProfile} options={{ title: 'Editar Datos del usuario' }}/>
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ title: 'Restablecer Contraseña', headerShown: true }} />
           </Stack.Navigator>
         </NavigationContainer>
       </ChatProvider>

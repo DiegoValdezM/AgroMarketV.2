@@ -62,6 +62,15 @@ const inicioStyle = StyleSheet.create({
     alignItems: 'center',
     padding: width * 0.03,
   },
+  forgotPasswordButton: {
+    marginTop: 15, // Espacio entre el botón de registro y este
+  },
+  forgotPasswordText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+    textDecorationLine: 'underline', // Subrayado para indicar que es un enlace
+  }
 });
 
 export default inicioStyle;
